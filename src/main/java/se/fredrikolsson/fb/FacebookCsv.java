@@ -20,9 +20,9 @@ import java.util.TreeMap;
  *
  */
 public class FacebookCsv {
-    private static String appId = "416771972029903";
-   	private static String appSecret = "7bd42868f999e56a79a5ce85e35a6805";
-   	private static String accessToken = "416771972029903|m-vnXHraYpkPvG3ULrK_NV2b5y0";
+    private static String appId = "dummy";
+   	private static String appSecret = "dummy";
+   	private static String accessToken = "dummy";
 
 
        // TODO use from to date, and max number of posts to fetch as constraints
