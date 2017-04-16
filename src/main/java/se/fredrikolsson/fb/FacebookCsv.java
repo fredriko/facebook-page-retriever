@@ -52,12 +52,13 @@ public class FacebookCsv {
 
         int responseNum = 0;
         int postNum = 0;
-        int maxPosts = 5;
+        int maxPosts = 3;
         boolean shouldFinish = false;
         for (BatchResponse response : batchResponses) {
             if (shouldFinish) {
                 break;
             }
+            String facebookPageUrl = facebookPageUrls.get(responseNum);
             responseNum++;
             System.out.println("Response number: " + responseNum);
             Connection<Post> postConnection = new Connection<>(getFacebookClient(), response.getBody(), Post.class);
@@ -78,7 +79,7 @@ public class FacebookCsv {
                     System.out.println("\n#############");
                     System.out.println("Post number: " + postNum);
 
-                    Map<String, String> postMap = getPostAsMap(post);
+                    Map<String, String> postMap = getPostAsMap(post, facebookPageUrl);
                     // TODO create CSV record from post map and print to designated post CSV file
                     for (Map.Entry<String, String> entry : postMap.entrySet()) {
                         System.out.println(entry.getKey() + " -> " + entry.getValue());
@@ -88,23 +89,25 @@ public class FacebookCsv {
                     for (List<Comment> comments : commentConnection) {
                         for (Comment comment : comments) {
 
-                            Map<String, String> commentMap = getCommentAsMap(comment);
+                            Map<String, String> commentMap = getCommentAsMap(comment, post.getId(), facebookPageUrl, "comment");
 
                             // TODO create CSV record from comment map and print to designated comments CSV file
                             for (Map.Entry<String, String> entry : commentMap.entrySet()) {
                                 System.out.println("    * " + entry.getKey() + " -> " + entry.getValue());
                             }
+                            System.out.println("");
 
                             Connection<Comment> subCommentConnection = fetchCommentConnection(comment.getId());
                             for (List<Comment> subComments : subCommentConnection) {
                                 for (Comment subComment : subComments) {
 
-                                    Map<String, String> subCommentMap = getCommentAsMap(subComment);
+                                    Map<String, String> subCommentMap = getCommentAsMap(subComment, comment.getId(), facebookPageUrl, "sub_comment");
 
                                     // TODO create CSV record from comment map and print to designated comments CSV file
                                     for (Map.Entry<String, String> entry : subCommentMap.entrySet()) {
                                         System.out.println("        ** " + entry.getKey() + " -> " + entry.getValue());
                                     }
+                                    System.out.println("");
 
                                 }
                             }
@@ -119,29 +122,35 @@ public class FacebookCsv {
         return getFacebookClient().fetchConnection(
                 endPointId + "/comments",
                 Comment.class,
-                Parameter.with("fields", "from{id,name},message,created_time,comments,likes.summary(true){total_count}"));
+                Parameter.with("fields", "from{id,name},message,created_time,comments,type,likes.summary(true){total_count}"));
 
     }
 
-    private Map<String, String> getCommentAsMap(Comment c) {
+    private Map<String, String> getCommentAsMap(Comment c, String parentId, String facebookPageUrl, String statusType) {
         Map<String, String> m = new LinkedHashMap<>();
+        m.put("facebook_page_url", facebookPageUrl);
         m.put("message", c.getMessage());
         m.put("from_id", c.getFrom().getId());
         m.put("from_name", c.getFrom().getName());
-        m.put("comment_id", c.getId());
+        m.put("status_type", statusType);
         if (c.getCreatedTime() != null) {
             m.put("created_time", c.getCreatedTime().toString());
         }
+        m.put("id", c.getId());
+        m.put("in_response_to_id", parentId);
+        m.put("message_type", c.getType());
         if (c.getLikes() != null) {
             m.put("likes_count", c.getLikes().getTotalCount().toString());
         }
+        m.put("shares_count", null);
+        m.put("url_in_message", null);
+        m.put("message_permalink_url", null);
         return m;
     }
 
-    // TODO make sure no null values are present. Clean up unused keys. And remove them from config fields in request to reduce payload.
-    private Map<String, String> getPostAsMap(Post p) {
+    private Map<String, String> getPostAsMap(Post p, String facebookPageUrl) {
         Map<String, String> m = new LinkedHashMap<>();
-
+        m.put("facebook_page_url", facebookPageUrl);
         m.put("message", p.getMessage());
         m.put("from_id", p.getFrom().getId());
         m.put("from_name", p.getFrom().getName());
@@ -149,30 +158,17 @@ public class FacebookCsv {
         if (p.getCreatedTime() != null) {
             m.put("created_time", p.getCreatedTime().toString());
         }
-        m.put("post_id", p.getId());
-        m.put("post_type", p.getType());
-        if (p.getReactions() != null) {
-            m.put("num_reactions", p.getReactions().getTotalCount().toString());
-               /*
-               int numReactions = 0;
-               Connection<Reactions.ReactionItem> connection = getFacebookClient().fetchConnection(p.getId() + "/reactions", Reactions.ReactionItem.class);
-               for (List<Reactions.ReactionItem> items : connection) {
-                   for (Reactions.ReactionItem item : items) {
-                       numReactions++;
-                       //System.out.println("Reaction item : " + item.getType());
-                   }
-               }
-               System.out.println("number of reactions (counted): " + numReactions);
-               */
-        }
+        m.put("id", p.getId());
+        m.put("in_response_to_id", p.getParentId());
+        m.put("message_type", p.getType());
         if (p.getLikes() != null) {
-            m.put("num_likes", p.getLikes().getTotalCount().toString());
+            m.put("likes_count", p.getLikes().getTotalCount().toString());
         }
         if (p.getShares() != null) {
-            m.put("num_shares", p.getShares().getCount().toString());
+            m.put("shares_count", p.getShares().getCount().toString());
         }
-        m.put("url_in_post", p.getLink());
-        m.put("post_permalink_url", p.getPermalinkUrl());
+        m.put("url_in_message", p.getLink());
+        m.put("message_permalink_url", p.getPermalinkUrl());
         return m;
     }
 
@@ -189,8 +185,8 @@ public class FacebookCsv {
                     .parameters(
                             Parameter.with("limit", 10),
                             Parameter.with("fields",
-                                    "reactions.summary(true), " +
                                             "from, " +
+                                            "parent_id, " +
                                             "likes.limit(0).summary(true), " +
                                             "comments," +
                                             "shares, " +
@@ -215,7 +211,7 @@ public class FacebookCsv {
      * @return A map where a key is the Facebook id, and the corresponding value is the Facebook URL.
      */
     private Map<String, String> fetchPageIds(List<String> facebookPageUrls) {
-        JsonObject result = getFacebookClient().fetchObjects(facebookPageUrls, JsonObject.class, Parameter.with("fields", "likes.summary(true), fan_count.summary(true)"));
+        JsonObject result = getFacebookClient().fetchObjects(facebookPageUrls, JsonObject.class);
         Map<String, String> idPageNameMap = new LinkedHashMap<>();
         for (String targetPage : facebookPageUrls) {
             String id = ((JsonObject) result.get(targetPage)).get("id").asString();
