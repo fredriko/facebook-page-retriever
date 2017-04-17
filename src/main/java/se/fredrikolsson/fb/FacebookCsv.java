@@ -29,7 +29,7 @@ public class FacebookCsv {
     // TODO make fetching of comments optional
     // TODO make it possible to have constraints on the number of comments fetched per post
     // TODO keep track of rate limits - see "rate limiting" here: http://restfb.com/documentation/
-    // TODO use from to date, and max number of posts to fetch as constraints
+    // TODO use from to date, and max number of posts to fetch as constraints: Parameter.with("since", from), Parameter.with("until", until)
     // TODO add optional filter terms so that only posts/comments including them (which?) are retained in the output
     // TODO generate README with metadata for each run, alternatively generate master CSV with metadata.
     // TODO make program generate appAccessToken if there is none in the provided credentials properties file
@@ -229,11 +229,7 @@ public class FacebookCsv {
         return m;
     }
 
-    /*
-    TODO
-                                Parameter.with("since", from),
-                            Parameter.with("until", until),
-     */
+
     private List<BatchRequest> createBatchRequests(List<String> facebookPageUrls) {
         Map<String, String> idPageNameMap = fetchPageIds(facebookPageUrls);
         List<BatchRequest> requests = new ArrayList<>();
