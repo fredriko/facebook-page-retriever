@@ -17,7 +17,8 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- *
+ * Class for fetching Posts and Comments from a given set of Facebook Pages, and save them as
+ * CSV files.
  */
 public class FacebookCsv {
 
@@ -56,8 +57,8 @@ public class FacebookCsv {
     private Properties facebookCredentials;
 
     public static void main(String... args) throws Exception {
-        String propertiesFile = "/Users/fredriko/Dropbox/facebook-credentials.properties";
-        String outputDirectoryName = "/Users/fredriko/Dropbox/tmp";
+        String propertiesFile = "/home/fredriko/Dropbox/facebook-credentials.properties";
+        String outputDirectoryName = "/home/fredriko/Dropbox/tmp";
         List<String> targetPages = new ArrayList<>();
         targetPages.add("https://www.facebook.com/dn.se");
         targetPages.add("https://www.facebook.com/United/");
@@ -70,16 +71,6 @@ public class FacebookCsv {
         init(propertiesFile);
     }
 
-
-    private String createFileBaseName(String facebookPageUrl) {
-        facebookPageUrl = facebookPageUrl.endsWith("/")
-                ? facebookPageUrl.substring(0, facebookPageUrl.length() - 1)
-                : facebookPageUrl;
-        return "facebook-page-"
-                + facebookPageUrl.substring((facebookPageUrl.lastIndexOf('/') + 1), facebookPageUrl.length())
-                .replaceAll("[\\.@_]+", "-")
-                .toLowerCase();
-    }
 
     private void process(List<String> facebookPageUrls, String outputDirectoryName) throws IOException {
 
@@ -151,6 +142,16 @@ public class FacebookCsv {
             postCsv.close();
             commentCsv.close();
         }
+    }
+
+    private String createFileBaseName(String facebookPageUrl) {
+        facebookPageUrl = facebookPageUrl.endsWith("/")
+                ? facebookPageUrl.substring(0, facebookPageUrl.length() - 1)
+                : facebookPageUrl;
+        return "facebook-page-"
+                + facebookPageUrl.substring((facebookPageUrl.lastIndexOf('/') + 1), facebookPageUrl.length())
+                .replaceAll("[\\.@_]+", "-")
+                .toLowerCase();
     }
 
     private void printRecord(CSVPrinter out, Map<String, String> content) throws IOException {
