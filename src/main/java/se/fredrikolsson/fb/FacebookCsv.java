@@ -27,16 +27,32 @@ public class FacebookCsv {
 
     // https://developers.facebook.com/docs/graph-api/reference/v2.8/post
 
-    // TODO make fetching of comments optional
-    // TODO make it possible to have constraints on the number of comments fetched per post
+    /*
+    TODO the gprogram will have three modes:
+
+    1) set-up: generate appAccessToken, e.g.:
+    program --setup --appId <id> --appSecret <secret> --output facebookCredentials.properties
+
+    2) expand given set of facebook page urls with similar urls in a given number of steps: when querying the facebook
+    page for info, there's a field with similar pages, e.g.:
+    program --findSimilarPages --facebookCredentials <credentials.properties> --input <file> --output <file> --distance <integer>
+
+    3) fetch data (main mode), e..g,
+    program --facebookCredentials <credentials.properties> --input <facebookPagesUrlsFile> [--since <date> --until <date> ...]
+
+     */
+
     // TODO keep track of rate limits - see "rate limiting" here: http://restfb.com/documentation/
-    // TODO use from to date, and max number of posts to fetch as constraints: Parameter.with("since", from), Parameter.with("until", until)
-    // TODO add optional filter terms so that only posts/comments including them (which?) are retained in the output
+    // TODO add optional filter terms so that only posts including them, and their associated comments, are retained in the output
     // TODO generate README with metadata for each run, alternatively generate master CSV with metadata.
+
     // TODO make program generate appAccessToken if there is none in the provided credentials properties file
+
+
     // TODO refactor code
 
     private static List<String> csvHeaderFields = new ArrayList<>();
+
     static {
         csvHeaderFields.add("facebook_page_url");
         csvHeaderFields.add("message");
@@ -66,7 +82,7 @@ public class FacebookCsv {
         Date oneDayAgo = new Date(System.currentTimeMillis() - 24 * 60 * 60 * 1000);
         logger.info("oneDayAgo: {}", oneDayAgo.toString());
         FacebookCsv fb = new FacebookCsv(propertiesFile);
-        fb.process(targetPages, outputDirectoryName, 4, 2, oneDayAgo, null);
+        fb.process(targetPages, outputDirectoryName, 4, 2, oneDayAgo, new Date());
     }
 
     private FacebookCsv(String propertiesFile) {
@@ -291,15 +307,15 @@ public class FacebookCsv {
         List<BatchRequest> requests = new ArrayList<>();
         for (Map.Entry<String, String> entry : idPageNameMap.entrySet()) {
 
-
             BatchRequest.BatchRequestBuilder builder;
 
-            if (since == null && until == null) {
-                builder = new BatchRequest.BatchRequestBuilder(entry.getKey() + "/feed")
-                        .parameters(Parameter.with("limit", requestLimit), Parameter.with("fields", fields));
-            } else {
+            if (since != null && until != null) {
                 builder = new BatchRequest.BatchRequestBuilder(entry.getKey() + "/feed")
                         .parameters(Parameter.with("limit", requestLimit), Parameter.with("fields", fields), Parameter.with("since", since), Parameter.with("until", until));
+            } else {
+                builder = new BatchRequest.BatchRequestBuilder(entry.getKey() + "/feed")
+                        .parameters(Parameter.with("limit", requestLimit), Parameter.with("fields", fields));
+
             }
             requests.add(builder.build());
         }
