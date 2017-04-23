@@ -57,14 +57,16 @@ public class FacebookCsv {
     private Properties facebookCredentials;
 
     public static void main(String... args) throws Exception {
-        String propertiesFile = "/home/fredriko/Dropbox/facebook-credentials.properties";
-        String outputDirectoryName = "/home/fredriko/Dropbox/tmp";
+        String propertiesFile = "/Users/fredriko/Dropbox/facebook-credentials.properties";
+        String outputDirectoryName = "/Users/fredriko/Dropbox/tmp";
         List<String> targetPages = new ArrayList<>();
         targetPages.add("https://www.facebook.com/dn.se");
         targetPages.add("https://www.facebook.com/United/");
 
+        Date oneDayAgo = new Date(System.currentTimeMillis() - 24 * 60 * 60 * 1000);
+        logger.info("oneDayAgo: {}", oneDayAgo.toString());
         FacebookCsv fb = new FacebookCsv(propertiesFile);
-        fb.process(targetPages, outputDirectoryName);
+        fb.process(targetPages, outputDirectoryName, 4, 2, oneDayAgo, null);
     }
 
     private FacebookCsv(String propertiesFile) {
@@ -72,17 +74,18 @@ public class FacebookCsv {
     }
 
 
-    private void process(List<String> facebookPageUrls, String outputDirectoryName) throws IOException {
+    private void process(List<String> facebookPageUrls, String outputDirectoryName, int maxNumPostsPerPage, int maxNumCommentsPerPage, Date since, Date until) throws IOException {
 
-        List<BatchRequest> requests = createBatchRequests(facebookPageUrls);
+        List<BatchRequest> requests = createBatchRequests(facebookPageUrls, 10, since, until);
         List<BatchResponse> batchResponses = getFacebookClient().executeBatch(requests);
 
         int responseNum = 0;
-        int maxPostsPerPage = 3;
 
         for (BatchResponse response : batchResponses) {
             int numPostsSeenForCurrentPage = 0;
-            boolean goToNextFacebookPage = false;
+            boolean doneProcessingPage = false;
+
+            // TODO refactor into new method
             String facebookPageUrl = facebookPageUrls.get(responseNum);
             logger.info("Processing Facebook Page: {}", facebookPageUrl);
             String outputFileBaseName = outputDirectoryName + File.separator + createFileBaseName(facebookPageUrl);
@@ -94,18 +97,19 @@ public class FacebookCsv {
             commentCsv.printRecord(getCsvHeaderFields());
             logger.info("Writing posts to file: {}", postsFileName);
             logger.info("Writing comments to file: {}", commentsFileName);
+
             responseNum++;
 
             Connection<Post> postConnection = new Connection<>(getFacebookClient(), response.getBody(), Post.class);
             for (List<Post> posts : postConnection) {
-                if (goToNextFacebookPage) {
+                if (doneProcessingPage) {
                     break;
                 }
                 for (Post post : posts) {
-                    if (numPostsSeenForCurrentPage >= maxPostsPerPage) {
+                    if (maxNumPostsPerPage != -1 && numPostsSeenForCurrentPage >= maxNumPostsPerPage) {
                         logger.info("Seen {} of maximum allowed {} posts for page {}",
-                                numPostsSeenForCurrentPage, maxPostsPerPage, facebookPageUrl);
-                        goToNextFacebookPage = true;
+                                numPostsSeenForCurrentPage, maxNumPostsPerPage, facebookPageUrl);
+                        doneProcessingPage = true;
                         break;
                     }
                     numPostsSeenForCurrentPage++;
@@ -115,28 +119,55 @@ public class FacebookCsv {
                     Map<String, String> postMap = getPostAsMap(post, facebookPageUrl);
                     printRecord(postCsv, postMap);
 
-                    Connection<Comment> commentConnection = fetchCommentConnection(post.getId());
-                    int numComments = 0;
-                    logger.info("Processing comments for post number {}: {}...",
-                            numPostsSeenForCurrentPage, postMap.get("message_permalink_url"));
-                    for (List<Comment> comments : commentConnection) {
-                        for (Comment comment : comments) {
-                            numComments++;
-                            Map<String, String> commentMap =
-                                    getCommentAsMap(comment, post.getId(), facebookPageUrl, "comment");
-                            printRecord(commentCsv, commentMap);
-                            Connection<Comment> subCommentConnection = fetchCommentConnection(comment.getId());
-                            for (List<Comment> subComments : subCommentConnection) {
-                                for (Comment subComment : subComments) {
-                                    numComments++;
-                                    Map<String, String> subCommentMap =
-                                            getCommentAsMap(subComment, comment.getId(), facebookPageUrl, "sub_comment");
-                                    printRecord(commentCsv, subCommentMap);
+                    // TODO refactor into new method, handling comments only
+                    // If maxNumCommentsPerPage == -1, then all comments should be fetched.
+                    // If maxNumCommentsPerPage > 0, then a given number should be fetched.
+                    // If maxNumCommentsPerPage == 0, then no comments should be fetched
+                    if (maxNumCommentsPerPage != 0) {
+                        int numCommentsSeenForCurrentPost = 0;
+                        boolean doneProcessingComments = false;
+                        Connection<Comment> commentConnection = fetchCommentConnection(post.getId());
+                        int numComments = 0;
+                        logger.info("Processing comments for post number {}: {}...",
+                                numPostsSeenForCurrentPage, postMap.get("message_permalink_url"));
+                        for (List<Comment> comments : commentConnection) {
+                            if (doneProcessingComments) {
+                                break;
+                            }
+                            for (Comment comment : comments) {
+                                if (maxNumCommentsPerPage != -1 && numCommentsSeenForCurrentPost >= maxNumCommentsPerPage) {
+                                    logger.info("Seen {} of maximum allowed {} comments for post {}",
+                                            numCommentsSeenForCurrentPost, maxNumCommentsPerPage, post.getId());
+                                    doneProcessingComments = true;
+                                    break;
+                                }
+                                numCommentsSeenForCurrentPost++;
+                                numComments++;
+                                Map<String, String> commentMap =
+                                        getCommentAsMap(comment, post.getId(), facebookPageUrl, "comment");
+                                printRecord(commentCsv, commentMap);
+                                if (!doneProcessingComments) {
+                                    Connection<Comment> subCommentConnection = fetchCommentConnection(comment.getId());
+                                    for (List<Comment> subComments : subCommentConnection) {
+                                        for (Comment subComment : subComments) {
+                                            if (maxNumCommentsPerPage != -1 && numCommentsSeenForCurrentPost >= maxNumCommentsPerPage) {
+                                                logger.info("Seen {} of maximum allowed {} comments for post {}",
+                                                        numCommentsSeenForCurrentPost, maxNumCommentsPerPage, post.getId());
+                                                doneProcessingComments = true;
+                                                break;
+                                            }
+                                            numCommentsSeenForCurrentPost++;
+                                            numComments++;
+                                            Map<String, String> subCommentMap =
+                                                    getCommentAsMap(subComment, comment.getId(), facebookPageUrl, "sub_comment");
+                                            printRecord(commentCsv, subCommentMap);
+                                        }
+                                    }
                                 }
                             }
                         }
+                        logger.info("Found {} {}", numComments, numComments == 1 ? "comment" : "comments");
                     }
-                    logger.info("Found {} {}", numComments, numComments == 1 ? "comment" : "comments");
                 }
             }
             postCsv.close();
@@ -231,29 +262,46 @@ public class FacebookCsv {
     }
 
 
-    private List<BatchRequest> createBatchRequests(List<String> facebookPageUrls) {
+    // TODO test
+    protected List<BatchRequest> createBatchRequests(List<String> facebookPageUrls, int requestLimit, Date since, Date until) {
+
+        if (since != null && until != null && until.before(since)) {
+            throw new IllegalArgumentException("Parameter \"until\" (" + until.toString() + ")cannot be before \"since\" (" + since.toString() + ")");
+        }
+
+        if (since == null && until != null) {
+            throw new IllegalArgumentException("Parameter \"until\" requires a valid \"since\" parameter");
+        }
+
+        String fields = "from, "
+                + "parent_id, "
+                + "likes.limit(0).summary(true), "
+                + "comments,"
+                + "shares,"
+                + "id,"
+                + "name,"
+                + "message,"
+                + "status_type,"
+                + "type,"
+                + "created_time,"
+                + "link,"
+                + "permalink_url";
+
         Map<String, String> idPageNameMap = fetchPageIds(facebookPageUrls);
         List<BatchRequest> requests = new ArrayList<>();
         for (Map.Entry<String, String> entry : idPageNameMap.entrySet()) {
-            BatchRequest request = new BatchRequest.BatchRequestBuilder(entry.getKey() + "/feed")
-                    .parameters(
-                            Parameter.with("limit", 10),
-                            Parameter.with("fields",
-                                            "from, " +
-                                            "parent_id, " +
-                                            "likes.limit(0).summary(true), " +
-                                            "comments," +
-                                            "shares, " +
-                                            "id, " +
-                                            "name, " +
-                                            "message, " +
-                                            "status_type, " +
-                                            "type, " +
-                                            "created_time, " +
-                                            "link, " +
-                                            "permalink_url"))
-                    .build();
-            requests.add(request);
+
+
+            BatchRequest.BatchRequestBuilder builder;
+
+            if (since == null && until == null) {
+                builder = new BatchRequest.BatchRequestBuilder(entry.getKey() + "/feed")
+                        .parameters(Parameter.with("limit", requestLimit), Parameter.with("fields", fields));
+            } else {
+                builder = new BatchRequest.BatchRequestBuilder(entry.getKey() + "/feed")
+                        .parameters(Parameter.with("limit", requestLimit), Parameter.with("fields", fields), Parameter.with("since", since), Parameter.with("until", until));
+            }
+            requests.add(builder.build());
         }
         return requests;
     }
