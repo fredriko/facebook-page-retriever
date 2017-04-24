@@ -4,6 +4,7 @@ package se.fredrikolsson.fb;
 import com.restfb.*;
 import com.restfb.batch.BatchRequest;
 import com.restfb.batch.BatchResponse;
+import com.restfb.json.JsonArray;
 import com.restfb.json.JsonObject;
 import com.restfb.types.*;
 
@@ -33,12 +34,12 @@ public class FacebookCsv {
     1) set-up: generate appAccessToken, e.g.:
     program --setup --appId <id> --appSecret <secret> --output facebookCredentials.properties
 
-    2) expand given set of facebook page urls with similar urls in a given number of steps: when querying the facebook
-    page for info, there's a field with similar pages, e.g.:
-    program --findSimilarPages --facebookCredentials <credentials.properties> --input <file> --output <file> --distance <integer>
+    2) THIS WILL NOT WORK! SKIP FOR NOW! expand given set of facebook page urls with similar urls in a given number of steps: when querying the facebook
+    page for info, there's a field with liked pages, e.g.:
+    program --findLikedPages --facebookCredentials <credentials.properties> --input <file> --output <file> --distance <integer>
 
-    3) fetch data (main mode), e..g,
-    program --facebookCredentials <credentials.properties> --input <facebookPagesUrlsFile> [--since <date> --until <date> ...]
+    3) fetch data (main mode), e.g,
+    program --facebookCredentials <credentials.properties> --input <facebookPagesUrlsFile> --outputDirectory [--since <date> --until <date>] --maxPosts --maxComments
 
      */
 
@@ -78,11 +79,16 @@ public class FacebookCsv {
         List<String> targetPages = new ArrayList<>();
         targetPages.add("https://www.facebook.com/dn.se");
         targetPages.add("https://www.facebook.com/United/");
+        targetPages.add("5281959998");
+        targetPages.add("https://www.facebook.com/avpixlat/");
 
         Date oneDayAgo = new Date(System.currentTimeMillis() - 24 * 60 * 60 * 1000);
         logger.info("oneDayAgo: {}", oneDayAgo.toString());
+
         FacebookCsv fb = new FacebookCsv(propertiesFile);
-        fb.process(targetPages, outputDirectoryName, 4, 2, oneDayAgo, new Date());
+        //fb.process(targetPages, outputDirectoryName, 4, 2, oneDayAgo, new Date());
+        fb.fetchPageInfo(targetPages);
+        //fb.fetchPageIds(targetPages);
     }
 
     private FacebookCsv(String propertiesFile) {
@@ -90,9 +96,11 @@ public class FacebookCsv {
     }
 
 
-    private void process(List<String> facebookPageUrls, String outputDirectoryName, int maxNumPostsPerPage, int maxNumCommentsPerPage, Date since, Date until) throws IOException {
+    private void process(List<String> facebookPageUrls, String outputDirectoryName, int maxNumPostsPerPage,
+                         int maxNumCommentsPerPage, Date since, Date until) throws IOException {
 
-        List<BatchRequest> requests = createBatchRequests(facebookPageUrls, 10, since, until);
+        Map<String, String> facebookPageIds = fetchPageIds(facebookPageUrls);
+        List<BatchRequest> requests = createBatchRequests(facebookPageIds.values(), 10, since, until);
         List<BatchResponse> batchResponses = getFacebookClient().executeBatch(requests);
 
         int responseNum = 0;
@@ -279,7 +287,7 @@ public class FacebookCsv {
 
 
     // TODO test
-    protected List<BatchRequest> createBatchRequests(List<String> facebookPageUrls, int requestLimit, Date since, Date until) {
+    protected List<BatchRequest> createBatchRequests(Collection<String> facebookPageIds, int requestLimit, Date since, Date until) {
 
         if (since != null && until != null && until.before(since)) {
             throw new IllegalArgumentException("Parameter \"until\" (" + until.toString() + ")cannot be before \"since\" (" + since.toString() + ")");
@@ -303,17 +311,16 @@ public class FacebookCsv {
                 + "link,"
                 + "permalink_url";
 
-        Map<String, String> idPageNameMap = fetchPageIds(facebookPageUrls);
         List<BatchRequest> requests = new ArrayList<>();
-        for (Map.Entry<String, String> entry : idPageNameMap.entrySet()) {
+        for (String id : facebookPageIds) {
 
             BatchRequest.BatchRequestBuilder builder;
 
             if (since != null && until != null) {
-                builder = new BatchRequest.BatchRequestBuilder(entry.getKey() + "/feed")
+                builder = new BatchRequest.BatchRequestBuilder(id + "/feed")
                         .parameters(Parameter.with("limit", requestLimit), Parameter.with("fields", fields), Parameter.with("since", since), Parameter.with("until", until));
             } else {
-                builder = new BatchRequest.BatchRequestBuilder(entry.getKey() + "/feed")
+                builder = new BatchRequest.BatchRequestBuilder(id + "/feed")
                         .parameters(Parameter.with("limit", requestLimit), Parameter.with("fields", fields));
 
             }
@@ -326,18 +333,57 @@ public class FacebookCsv {
      * Fetches the Facebook page ids from given Facebook Page URLs.
      *
      * @param facebookPageUrls A list of Facebook URLs.
-     * @return A map where a key is the Facebook id, and the corresponding value is the Facebook URL.
+     * @return A map where a key is the Facebook url, and the corresponding value is the Facebook id.
      */
     private Map<String, String> fetchPageIds(List<String> facebookPageUrls) {
         JsonObject result = getFacebookClient().fetchObjects(facebookPageUrls, JsonObject.class);
         Map<String, String> idPageNameMap = new LinkedHashMap<>();
         for (String targetPage : facebookPageUrls) {
             String id = ((JsonObject) result.get(targetPage)).get("id").asString();
-            idPageNameMap.put(id, targetPage);
+            logger.info("result: {}", result.toString());
+            idPageNameMap.put(targetPage, id);
         }
         return idPageNameMap;
     }
 
+
+    // TODO facebookPageUrls should be facebookPageIdentifier and be able to take on URLs as well as id:s
+    private Map<String, FacebookPageInfo> fetchPageInfo(List<String> facebookPageIdentifiers) {
+        Map<String, FacebookPageInfo> result = new HashMap<>();
+        for (String identifier : facebookPageIdentifiers) {
+            FacebookPageInfo info = fetchPageInfo(identifier);
+            logger.info("Got page info: {}", info.toString());
+            result.put(info.getId(), info);
+        }
+        return result;
+    }
+
+
+    // TODO likes should be paged!
+    // TODO add only liked pages that are of any of the (sub) categories of the primary, input, facebookPageIdentifier
+    private FacebookPageInfo fetchPageInfo(String facebookPageIdentifier) {
+        JsonObject result = getFacebookClient().fetchObject(facebookPageIdentifier, JsonObject.class, Parameter.with("fields", "id, link, name, likes{id, name, link, category, category_list{id, name, fb_page_categories}}, category, category_list{id, name, fb_page_categories}"));
+        logger.info("result: {}", result.toString());
+
+        String id = result.get("id").asString();
+        String url = result.get("link").asString();
+        String name = result.get("name").asString();
+        JsonObject likes = result.get("likes").asObject();
+        List<FacebookPageInfo> likesUrls = new ArrayList<>();
+        if (likes != null) {
+            JsonArray data = likes.get("data").asArray();
+            for (int i = 0; i < data.size(); i++) {
+                JsonObject datum = data.get(i).asObject();
+                logger.info("datum: {}", datum.toString());
+                // TODO set link and category here as well.
+                likesUrls.add(new FacebookPageInfo(datum.get("name").asString(), datum.get("id").asString()));
+            }
+        }
+        FacebookPageInfo info = new FacebookPageInfo(name, id);
+        info.setUrl(url);
+        info.setLikes(likesUrls);
+        return info;
+    }
 
     private void init(String configFile) {
         try {
