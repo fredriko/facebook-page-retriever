@@ -1,6 +1,9 @@
 package se.fredrikolsson.fb;
 
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.PatternLayout;
+import ch.qos.logback.core.ConsoleAppender;
 import com.restfb.*;
 import com.restfb.batch.BatchRequest;
 import com.restfb.batch.BatchResponse;
@@ -29,31 +32,15 @@ import static joptsimple.util.DateConverter.datePattern;
  */
 public class FacebookCsv {
 
-    private static Logger logger = LoggerFactory.getLogger(FacebookCsv.class);
-
+    private Logger logger = LoggerFactory.getLogger(FacebookCsv.class);
 
     // https://developers.facebook.com/docs/graph-api/reference/v2.8/post
 
-    /*
-    TODO the program will have three modes:
-
-    1) set-up: generate appAccessToken, e.g.:
-    program --setup --appId <id> --appSecret <secret> --output facebookCredentials.properties
-
-    2) expand given set of facebook page urls with the pages liked by the given facebook pages, in a given number of steps:
-    program --findLikedPages --facebookCredentials <credentials.properties> --input <file> --output <file> --distance <integer>
-
-    3) fetch data (main mode), e.g,
-    program --facebookCredentials <credentials.properties> --input <facebookPagesUrlsFile> --outputDirectory [--since <date> --until <date>] --maxPosts --maxComments
-
-     */
-
+    // TODO log info about the pages to be processed (number of), and in progress add page number X of Y. Add total processing time at the end of the program.
+    // TODO handle interrupt from user to clean/close output files etc.
+    // TODO the program will have three modes: setup, expand given pages with liked pages, fetch pages and comments
     // TODO keep track of rate limits - see "rate limiting" here: http://restfb.com/documentation/
-    // TODO add optional filter terms so that only posts including them, and their associated comments, are retained in the output
-    // TODO generate README with metadata for each run, alternatively generate master CSV with metadata.
-
     // TODO make program generate appAccessToken if there is none in the provided credentials properties file
-
     // TODO refactor code, check for unused dependencies so as to minimize final jar
 
     private static List<String> csvHeaderFields = new ArrayList<>();
@@ -89,14 +76,34 @@ public class FacebookCsv {
 
         // Fetch scenario
         OptionSpec<Void> fetch = parser.acceptsAll(Arrays.asList("fetch", "f"));
-        OptionSpec<File> credentials = parser.acceptsAll(Arrays.asList("credentials", "c")).requiredIf(fetch).withRequiredArg().ofType(File.class);
-        OptionSpec<String> pages = parser.acceptsAll(Arrays.asList("pages", "p")).requiredIf(fetch).withRequiredArg().ofType(String.class);
-        OptionSpec<String> terms = parser.acceptsAll(Arrays.asList("terms", "t")).availableIf(fetch).withRequiredArg().ofType(String.class).withValuesSeparatedBy(",");
-        OptionSpec<Date> until = parser.acceptsAll(Arrays.asList("until", "u")).availableIf(fetch).withRequiredArg().withValuesConvertedBy(datePattern("yy-MM-dd"));
-        OptionSpec<Date> since = parser.acceptsAll(Arrays.asList("since", "s")).availableIf(fetch).requiredIf(until).withRequiredArg().withValuesConvertedBy(datePattern("yy-MM-dd"));
-        OptionSpec<Integer> maxPosts = parser.acceptsAll(Arrays.asList("maxPosts", "x")).availableIf(fetch).withRequiredArg().ofType(Integer.class);
-        OptionSpec<Integer> maxComments = parser.acceptsAll(Arrays.asList("maxComments", "y")).availableIf(fetch).withRequiredArg().ofType(Integer.class);
-        OptionSpec<File> outputDirectory = parser.acceptsAll(Arrays.asList("outputDirectory", "o")).requiredIf(fetch).withRequiredArg().ofType(File.class);
+        // TODO use default value: compute default, per OS, value of config dir (use same as --setup will use for storing credentials
+        OptionSpec<File> credentials =
+                parser.acceptsAll(Arrays.asList("credentials", "c"))
+                        .requiredIf(fetch).withRequiredArg().ofType(File.class);
+        OptionSpec<String> pages =
+                parser.acceptsAll(Arrays.asList("pages", "p"))
+                        .requiredIf(fetch).withRequiredArg().ofType(String.class);
+        OptionSpec<String> terms =
+                parser.acceptsAll(Arrays.asList("terms", "t"))
+                        .availableIf(fetch).withRequiredArg().ofType(String.class).withValuesSeparatedBy(",");
+        OptionSpec<Date> until =
+                parser.acceptsAll(Arrays.asList("until", "u"))
+                        .availableIf(fetch).withRequiredArg().withValuesConvertedBy(datePattern("yy-MM-dd"));
+        OptionSpec<Date> since =
+                parser.acceptsAll(Arrays.asList("since", "s"))
+                        .availableIf(fetch).requiredIf(until).withRequiredArg()
+                        .withValuesConvertedBy(datePattern("yy-MM-dd"));
+        OptionSpec<Integer> maxPosts =
+                parser.acceptsAll(Arrays.asList("maxPosts", "x"))
+                        .availableIf(fetch).withRequiredArg().ofType(Integer.class).defaultsTo(-1);
+        OptionSpec<Integer> maxComments =
+                parser.acceptsAll(Arrays.asList("maxComments", "y"))
+                        .availableIf(fetch).withRequiredArg().ofType(Integer.class).defaultsTo(-1);
+        OptionSpec<File> outputDirectory =
+                parser.acceptsAll(Arrays.asList("outputDirectory", "o"))
+                        .requiredIf(fetch).withRequiredArg().ofType(File.class);
+
+        OptionSpec<Void> verboseLogging = parser.acceptsAll(Arrays.asList("verbose", "v"));
 
         OptionSet commandLine = null;
         try {
@@ -106,7 +113,6 @@ public class FacebookCsv {
             printUsage();
             System.exit(1);
         }
-
         if (commandLine.has(help)) {
             printUsage();
             System.exit(0);
@@ -116,32 +122,11 @@ public class FacebookCsv {
 
         if (commandLine.has(fetch)) {
             FacebookCsv fb = new FacebookCsv(commandLine.valueOf(credentials).toString());
-            // TODO set up pages to fetch: provided either as a string, or as a file. If string starting with a @, then try to read it as a file
-            // TODO refactor into own method
-            List<String> pagesToFetch = new ArrayList<>();
-            if (commandLine.valueOf(pages).startsWith("@")) {
-                // TODO read from file
-                System.err.println("Reading pages from file not yet supported!");
-            } else {
-                for(String p : commandLine.valueOf(pages).split(",")) {
-                    pagesToFetch.add(p.trim());
-                }
-            }
-            // TODO refactor into own method
+            fb.setVerboseLogging(commandLine.has(verboseLogging));
+            List<String> pagesToFetch = getPageIdentifiers(commandLine.valueOf(pages));
             List<String> filterTerms = new ArrayList<>();
             if (commandLine.has(terms)) {
-                for (String term : commandLine.valueOf(terms).split(",")) {
-                    filterTerms.add(term.trim());
-                }
-            }
-
-            int maxNumPosts = -1;
-            if (commandLine.has(maxPosts)) {
-                maxNumPosts = commandLine.valueOf(maxPosts);
-            }
-            int maxNumComments = -1;
-            if (commandLine.has(maxComments)) {
-                maxNumComments = commandLine.valueOf(maxComments);
+                filterTerms = commandLine.valuesOf((terms));
             }
             Date sinceDate = null;
             if (commandLine.has(since)) {
@@ -151,15 +136,49 @@ public class FacebookCsv {
             if (commandLine.has(until)) {
                 untilDate = commandLine.valueOf(until);
             }
-            fb.process(pagesToFetch, filterTerms, commandLine.valueOf(outputDirectory), maxNumPosts, maxNumComments, sinceDate, untilDate);
+            fb.process(pagesToFetch, filterTerms, commandLine.valueOf(outputDirectory),
+                    commandLine.valueOf(maxPosts), commandLine.valueOf(maxComments), sinceDate, untilDate);
         }
 
     }
 
+    private static List<String> getPageIdentifiers(String identifier) throws IOException {
+        List<String> pagesToFetch = new ArrayList<>();
+        if (identifier.startsWith("@")) {
+            File file = new File(identifier.substring(1, identifier.length()));
+            BufferedReader reader = new BufferedReader(new FileReader(file));
+            for (String line; (line = reader.readLine()) != null; ) {
+                if (line.trim().isEmpty() || line.trim().startsWith("#")) {
+                    continue;
+                }
+                pagesToFetch.add(line.trim());
+            }
+        } else {
+            for (String i : identifier.split(",")) {
+                pagesToFetch.add(i.trim());
+            }
+        }
+        return pagesToFetch;
+    }
 
+
+    private void setVerboseLogging(boolean verbose) {
+        ch.qos.logback.classic.Logger logBack =
+                (ch.qos.logback.classic.Logger)
+                        org.slf4j.LoggerFactory.getLogger(ch.qos.logback.classic.Logger.ROOT_LOGGER_NAME);
+        if (verbose) {
+            logBack.setLevel(Level.DEBUG);
+        } else {
+            logBack.setLevel(Level.INFO);
+        }
+        this.logger = logBack;
+    }
+
+    // TODO
     private static void printUsage() {
         System.out.println("Usage: ...");
     }
+
 
     private FacebookCsv(String propertiesFile) {
         init(propertiesFile);
@@ -192,6 +211,7 @@ public class FacebookCsv {
 
             // TODO refactor into new method
             String facebookPageUrl = pages.get(responseNum).getUrl();
+            logger.info("################");
             logger.info("Processing Facebook Page: {}", facebookPageUrl);
             String outputFileBaseName = outputDirectory.toString() + File.separator + createFileBaseName(facebookPageUrl);
             String postsFileName = outputFileBaseName + "-posts.csv";
@@ -212,19 +232,19 @@ public class FacebookCsv {
                 }
                 for (Post post : posts) {
                     if (maxNumPostsPerPage != -1 && numPostsSeenForCurrentPage >= maxNumPostsPerPage) {
-                        logger.info("Seen {} of maximum allowed {} posts for page {}",
-                                numPostsSeenForCurrentPage, maxNumPostsPerPage, facebookPageUrl);
+                        logger.info("Processed {} posts for page {}",
+                                numPostsSeenForCurrentPage, facebookPageUrl);
                         doneProcessingPage = true;
                         break;
                     }
                     numPostsSeenForCurrentPage++;
 
-                    logger.info("Processing post number {} for page {}", numPostsSeenForCurrentPage, facebookPageUrl);
+                    logger.info("## Processing post number {}, published {}: {}", numPostsSeenForCurrentPage, post.getCreatedTime(), post.getPermalinkUrl());
 
                     Map<String, String> postMap = getPostAsMap(post, facebookPageUrl);
 
                     if (!shouldIncludePost(post, filterTerms)) {
-                        logger.info("Post did not fulfil filtering criteria. Skipping!");
+                        logger.info("Post did match any of the given filter terms. Skipping!");
                         continue;
                     }
                     printRecord(postCsv, postMap);
@@ -238,15 +258,16 @@ public class FacebookCsv {
                         boolean doneProcessingComments = false;
                         Connection<Comment> commentConnection = fetchCommentConnection(post.getId());
                         int numComments = 0;
-                        logger.info("Processing comments for post number {}: {}...",
-                                numPostsSeenForCurrentPage, postMap.get("message_permalink_url"));
                         for (List<Comment> comments : commentConnection) {
                             if (doneProcessingComments) {
                                 break;
                             }
                             for (Comment comment : comments) {
+                                if (numCommentsSeenForCurrentPost % 10 == 0 && numCommentsSeenForCurrentPost > 0) {
+                                    logger.info("Seen {} comments so far...", numCommentsSeenForCurrentPost);
+                                }
                                 if (maxNumCommentsPerPage != -1 && numCommentsSeenForCurrentPost >= maxNumCommentsPerPage) {
-                                    logger.info("Seen {} of maximum allowed {} comments for post {}",
+                                    logger.debug("Seen {} of maximum allowed {} comments for post {}",
                                             numCommentsSeenForCurrentPost, maxNumCommentsPerPage, post.getId());
                                     doneProcessingComments = true;
                                     break;
@@ -261,7 +282,7 @@ public class FacebookCsv {
                                     for (List<Comment> subComments : subCommentConnection) {
                                         for (Comment subComment : subComments) {
                                             if (maxNumCommentsPerPage != -1 && numCommentsSeenForCurrentPost >= maxNumCommentsPerPage) {
-                                                logger.info("Seen {} of maximum allowed {} comments for post {}",
+                                                logger.debug("Seen {} of maximum allowed {} comments for post {}",
                                                         numCommentsSeenForCurrentPost, maxNumCommentsPerPage, post.getId());
                                                 doneProcessingComments = true;
                                                 break;
@@ -276,13 +297,14 @@ public class FacebookCsv {
                                 }
                             }
                         }
-                        logger.info("Found {} {}", numComments, numComments == 1 ? "comment" : "comments");
+                        logger.info("Got {} {} for post {}", numComments, numComments == 1 ? "comment" : "comments", postMap.get("message_permalink_url"));
                     }
                 }
             }
             postCsv.close();
             commentCsv.close();
         }
+        logger.info("Done!");
     }
 
     private boolean shouldIncludePost(Post post, List<String> filterTerms) {
@@ -437,7 +459,6 @@ public class FacebookCsv {
         List<FacebookPageInfo> result = new ArrayList<>();
         for (String identifier : facebookPageIdentifiers) {
             FacebookPageInfo info = fetchPageInfo(identifier);
-            logger.info("Got page info: {}", info.toString());
             result.add(info);
         }
         return result;
@@ -448,7 +469,6 @@ public class FacebookCsv {
     // TODO add only liked pages that are of any of the (sub) categories of the primary, input, facebookPageIdentifier
     private FacebookPageInfo fetchPageInfo(String facebookPageIdentifier) {
         JsonObject result = getFacebookClient().fetchObject(facebookPageIdentifier, JsonObject.class, Parameter.with("fields", "id, link, name, likes{id, name, link, category, category_list{id, name, fb_page_categories}}, category, category_list{id, name, fb_page_categories}"));
-        logger.info("result: {}", result.toString());
 
         FacebookPageInfo info = new FacebookPageInfo(result.get("name").asString(), result.get("id").asString());
         info.setUrl(result.get("link").asString());
