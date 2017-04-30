@@ -11,10 +11,16 @@ import com.restfb.types.*;
 import java.io.*;
 import java.util.*;
 
+import joptsimple.OptionException;
+import joptsimple.OptionParser;
+import joptsimple.OptionSet;
+import joptsimple.OptionSpec;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVPrinter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static joptsimple.util.DateConverter.datePattern;
 
 
 /**
@@ -29,13 +35,12 @@ public class FacebookCsv {
     // https://developers.facebook.com/docs/graph-api/reference/v2.8/post
 
     /*
-    TODO the gprogram will have three modes:
+    TODO the program will have three modes:
 
     1) set-up: generate appAccessToken, e.g.:
     program --setup --appId <id> --appSecret <secret> --output facebookCredentials.properties
 
-    2) THIS WILL NOT WORK! SKIP FOR NOW! expand given set of facebook page urls with similar urls in a given number of steps: when querying the facebook
-    page for info, there's a field with liked pages, e.g.:
+    2) expand given set of facebook page urls with the pages liked by the given facebook pages, in a given number of steps:
     program --findLikedPages --facebookCredentials <credentials.properties> --input <file> --output <file> --distance <integer>
 
     3) fetch data (main mode), e.g,
@@ -49,8 +54,7 @@ public class FacebookCsv {
 
     // TODO make program generate appAccessToken if there is none in the provided credentials properties file
 
-
-    // TODO refactor code
+    // TODO refactor code, check for unused dependencies so as to minimize final jar
 
     private static List<String> csvHeaderFields = new ArrayList<>();
 
@@ -74,35 +78,113 @@ public class FacebookCsv {
     private Properties facebookCredentials;
 
     public static void main(String... args) throws Exception {
-        String propertiesFile = "/Users/fredriko/Dropbox/facebook-credentials.properties";
-        String outputDirectoryName = "/Users/fredriko/Dropbox/tmp";
-        List<String> targetPages = new ArrayList<>();
-        targetPages.add("https://www.facebook.com/dn.se");
-        targetPages.add("https://www.facebook.com/United/");
-        targetPages.add("5281959998");
-        targetPages.add("https://www.facebook.com/avpixlat/");
 
-        Date oneDayAgo = new Date(System.currentTimeMillis() - 24 * 60 * 60 * 1000);
-        logger.info("oneDayAgo: {}", oneDayAgo.toString());
+        if (args.length == 0) {
+            printUsage();
+            System.exit(1);
+        }
 
-        FacebookCsv fb = new FacebookCsv(propertiesFile);
-        //fb.process(targetPages, outputDirectoryName, 4, 2, oneDayAgo, new Date());
-        fb.fetchPageInfo(targetPages);
-        //fb.fetchPageIds(targetPages);
+        OptionParser parser = new OptionParser();
+        OptionSpec<Void> help = parser.accepts("help").forHelp();
+
+        // --fetch -credentials <credentials file> -pages <string or file w page ids> -terms <filter terms> -since <date> -until <date> -maxPosts -maxComments -csv-out
+        OptionSpec<Void> fetch = parser.acceptsAll(Arrays.asList("fetch", "f"));
+        OptionSpec<File> credentials = parser.acceptsAll(Arrays.asList("credentials", "c")).requiredIf(fetch).withRequiredArg().ofType(File.class);
+        OptionSpec<String> pages = parser.acceptsAll(Arrays.asList("pages", "p")).requiredIf(fetch).withRequiredArg().ofType(String.class);
+        OptionSpec<String> terms = parser.acceptsAll(Arrays.asList("terms", "t")).availableIf(fetch).withRequiredArg().ofType(String.class).withValuesSeparatedBy(",");
+        OptionSpec<Date> until = parser.acceptsAll(Arrays.asList("until", "u")).availableIf(fetch).withRequiredArg().withValuesConvertedBy(datePattern("yy-MM-dd"));
+        OptionSpec<Date> since = parser.acceptsAll(Arrays.asList("since", "s")).availableIf(fetch).requiredIf(until).withRequiredArg().withValuesConvertedBy(datePattern("yy-MM-dd"));
+        OptionSpec<Integer> maxPosts = parser.acceptsAll(Arrays.asList("maxPosts", "x")).availableIf(fetch).withRequiredArg().ofType(Integer.class);
+        OptionSpec<Integer> maxComments = parser.acceptsAll(Arrays.asList("maxComments", "y")).availableIf(fetch).withRequiredArg().ofType(Integer.class);
+        OptionSpec<File> outputDirectory = parser.acceptsAll(Arrays.asList("outputDirectory", "o")).requiredIf(fetch).withRequiredArg().ofType(File.class);
+
+        OptionSet commandLine = null;
+        try {
+            commandLine = parser.parse(args);
+        } catch (OptionException e) {
+            System.out.println("Error while parsing the command line: " + e.getMessage());
+            printUsage();
+            System.exit(1);
+        }
+
+        if (commandLine.has(help)) {
+            printUsage();
+            System.exit(0);
+        }
+
+        System.out.println("Program started with arguments: " + String.join(" ", args));
+
+        if (commandLine.has(fetch)) {
+
+            FacebookCsv fb = new FacebookCsv(commandLine.valueOf(credentials).toString());
+            // TODO set up pages to fetch: provided either as a string, or as a file. If string starting with a @, then try to read it as a file
+            // TODO refactor into own method
+            List<String> pagesToFetch = new ArrayList<>();
+            if (commandLine.valueOf(pages).startsWith("@")) {
+                // TODO read from file
+                System.err.println("Reading pages from file not yet supported!");
+            } else {
+                for(String p : commandLine.valueOf(pages).split(",")) {
+                    pagesToFetch.add(p.trim());
+                }
+            }
+            // TODO refactor into own method
+            List<String> filterTerms = new ArrayList<>();
+            if (commandLine.has(terms)) {
+                for (String term : commandLine.valueOf(terms).split(",")) {
+                    filterTerms.add(term.trim());
+                }
+            }
+
+            int maxNumPosts = -1;
+            if (commandLine.has(maxPosts)) {
+                maxNumPosts = commandLine.valueOf(maxPosts);
+            }
+            int maxNumComments = -1;
+            if (commandLine.has(maxComments)) {
+                maxNumComments = commandLine.valueOf(maxComments);
+            }
+            Date sinceDate = null;
+            if (commandLine.has(since)) {
+                sinceDate = commandLine.valueOf(since);
+            }
+            Date untilDate = null;
+            if (commandLine.has(until)) {
+                untilDate = commandLine.valueOf(until);
+            }
+            fb.process(pagesToFetch, filterTerms, commandLine.valueOf(outputDirectory), maxNumPosts, maxNumComments, sinceDate, untilDate);
+        }
+
+    }
+
+
+    private static void printUsage() {
+        System.out.println("Usage: ...");
     }
 
     private FacebookCsv(String propertiesFile) {
         init(propertiesFile);
     }
 
+    private void process(List<String> facebookPageIdentifiers, List<String> filterTerms, File outputDirectory,
+                         int maxNumPostsPerPage, int maxNumCommentsPerPage, Date since, Date until) throws IOException {
 
-    private void process(List<String> facebookPageUrls, String outputDirectoryName, int maxNumPostsPerPage,
-                         int maxNumCommentsPerPage, Date since, Date until) throws IOException {
+        if (!outputDirectory.isDirectory()) {
+            logger.error("Provided output location {} is not a directory. Aborting!", outputDirectory.toString());
+            return;
+        }
+        if (!outputDirectory.canWrite()) {
+            logger.error("Cannot write to given output directory {}. Aborting!", outputDirectory.toString());
+        }
 
-        Map<String, String> facebookPageIds = fetchPageIds(facebookPageUrls);
-        List<BatchRequest> requests = createBatchRequests(facebookPageIds.values(), 10, since, until);
+        List<FacebookPageInfo> pages = fetchPageInfo(facebookPageIdentifiers);
+        List<String> pageIds = new ArrayList<>();
+        for (FacebookPageInfo page : pages) {
+            pageIds.add(page.getId());
+        }
+
+        List<BatchRequest> requests = createBatchRequests(pageIds, 10, since, until);
         List<BatchResponse> batchResponses = getFacebookClient().executeBatch(requests);
-
         int responseNum = 0;
 
         for (BatchResponse response : batchResponses) {
@@ -110,9 +192,9 @@ public class FacebookCsv {
             boolean doneProcessingPage = false;
 
             // TODO refactor into new method
-            String facebookPageUrl = facebookPageUrls.get(responseNum);
+            String facebookPageUrl = pages.get(responseNum).getUrl();
             logger.info("Processing Facebook Page: {}", facebookPageUrl);
-            String outputFileBaseName = outputDirectoryName + File.separator + createFileBaseName(facebookPageUrl);
+            String outputFileBaseName = outputDirectory.toString() + File.separator + createFileBaseName(facebookPageUrl);
             String postsFileName = outputFileBaseName + "-posts.csv";
             String commentsFileName = outputFileBaseName + "-comments.csv";
             CSVPrinter postCsv = new CSVPrinter(new PrintWriter(postsFileName), CSVFormat.DEFAULT);
@@ -141,6 +223,11 @@ public class FacebookCsv {
                     logger.info("Processing post number {} for page {}", numPostsSeenForCurrentPage, facebookPageUrl);
 
                     Map<String, String> postMap = getPostAsMap(post, facebookPageUrl);
+
+                    if (!shouldIncludePost(post, filterTerms)) {
+                        logger.info("Post did not fulfil filtering criteria. Skipping!");
+                        continue;
+                    }
                     printRecord(postCsv, postMap);
 
                     // TODO refactor into new method, handling comments only
@@ -197,6 +284,24 @@ public class FacebookCsv {
             postCsv.close();
             commentCsv.close();
         }
+    }
+
+    private boolean shouldIncludePost(Post post, List<String> filterTerms) {
+        boolean result = false;
+        // If no filter terms are given, or if the post contains no text, then it should be included in
+        // further processing.
+        if (filterTerms.isEmpty() || post.getMessage() == null) {
+            result = true;
+        } else if (post.getMessage() != null) {
+            String postContent = post.getMessage().toLowerCase();
+            for (String filterTerm : filterTerms) {
+                if (postContent.contains(filterTerm)) {
+                    result = true;
+                    break;
+                }
+            }
+        }
+        return result;
     }
 
     private String createFileBaseName(String facebookPageUrl) {
@@ -286,7 +391,6 @@ public class FacebookCsv {
     }
 
 
-    // TODO test
     protected List<BatchRequest> createBatchRequests(Collection<String> facebookPageIds, int requestLimit, Date since, Date until) {
 
         if (since != null && until != null && until.before(since)) {
@@ -329,31 +433,13 @@ public class FacebookCsv {
         return requests;
     }
 
-    /**
-     * Fetches the Facebook page ids from given Facebook Page URLs.
-     *
-     * @param facebookPageUrls A list of Facebook URLs.
-     * @return A map where a key is the Facebook url, and the corresponding value is the Facebook id.
-     */
-    private Map<String, String> fetchPageIds(List<String> facebookPageUrls) {
-        JsonObject result = getFacebookClient().fetchObjects(facebookPageUrls, JsonObject.class);
-        Map<String, String> idPageNameMap = new LinkedHashMap<>();
-        for (String targetPage : facebookPageUrls) {
-            String id = ((JsonObject) result.get(targetPage)).get("id").asString();
-            logger.info("result: {}", result.toString());
-            idPageNameMap.put(targetPage, id);
-        }
-        return idPageNameMap;
-    }
 
-
-    // TODO facebookPageUrls should be facebookPageIdentifier and be able to take on URLs as well as id:s
-    private Map<String, FacebookPageInfo> fetchPageInfo(List<String> facebookPageIdentifiers) {
-        Map<String, FacebookPageInfo> result = new HashMap<>();
+    private List<FacebookPageInfo> fetchPageInfo(List<String> facebookPageIdentifiers) {
+        List<FacebookPageInfo> result = new ArrayList<>();
         for (String identifier : facebookPageIdentifiers) {
             FacebookPageInfo info = fetchPageInfo(identifier);
             logger.info("Got page info: {}", info.toString());
-            result.put(info.getId(), info);
+            result.add(info);
         }
         return result;
     }
@@ -365,22 +451,25 @@ public class FacebookCsv {
         JsonObject result = getFacebookClient().fetchObject(facebookPageIdentifier, JsonObject.class, Parameter.with("fields", "id, link, name, likes{id, name, link, category, category_list{id, name, fb_page_categories}}, category, category_list{id, name, fb_page_categories}"));
         logger.info("result: {}", result.toString());
 
-        String id = result.get("id").asString();
-        String url = result.get("link").asString();
-        String name = result.get("name").asString();
-        JsonObject likes = result.get("likes").asObject();
+        FacebookPageInfo info = new FacebookPageInfo(result.get("name").asString(), result.get("id").asString());
+        info.setUrl(result.get("link").asString());
+        info.setPrimaryCategory(result.get("category").asString());
+
         List<FacebookPageInfo> likesUrls = new ArrayList<>();
-        if (likes != null) {
-            JsonArray data = likes.get("data").asArray();
-            for (int i = 0; i < data.size(); i++) {
-                JsonObject datum = data.get(i).asObject();
-                logger.info("datum: {}", datum.toString());
-                // TODO set link and category here as well.
-                likesUrls.add(new FacebookPageInfo(datum.get("name").asString(), datum.get("id").asString()));
+        if (result.get("likes") != null) {
+            JsonObject likes = result.get("likes").asObject();
+            if (likes != null) {
+                JsonArray data = likes.get("data").asArray();
+                for (int i = 0; i < data.size(); i++) {
+                    JsonObject datum = data.get(i).asObject();
+                    logger.debug("datum: {}", datum.toString());
+                    FacebookPageInfo likedPage = new FacebookPageInfo(datum.get("name").asString(), datum.get("id").asString());
+                    likedPage.setUrl(datum.get("link").asString());
+                    likedPage.setPrimaryCategory(datum.get("category").asString());
+                    likesUrls.add(likedPage);
+                }
             }
         }
-        FacebookPageInfo info = new FacebookPageInfo(name, id);
-        info.setUrl(url);
         info.setLikes(likesUrls);
         return info;
     }

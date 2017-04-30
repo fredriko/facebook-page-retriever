@@ -8,16 +8,24 @@ import java.util.List;
  */
 public class FacebookPageInfo {
 
-    private final String name;
-    private final String id;
+    private String name;
+    private String id;
     private String url;
     private String primaryCategory;
     private List<String> subCategories;
     private List<FacebookPageInfo> likes = new ArrayList<>();
 
+    FacebookPageInfo(String id) {
+        this.id = id;
+    }
+
     FacebookPageInfo(String name, String id) {
         this.name = name;
         this.id = id;
+    }
+
+    public void setName(String name) {
+        this.name = name;
     }
 
     public String getName() {
@@ -26,6 +34,10 @@ public class FacebookPageInfo {
 
     public String getId() {
         return id;
+    }
+
+    public void setId(String id) {
+        this.id = id;
     }
 
     public String getUrl() {
@@ -62,6 +74,6 @@ public class FacebookPageInfo {
 
     @Override
     public String toString() {
-        return "FacebookPageId[name=" + getName() +", id=" + getId() + ", url=" + getUrl() + ", likes=" + getLikes() + "]";
+        return "FacebookPageId[name=" + getName() +", id=" + getId() + ", url=" + getUrl() + ", category=" + getPrimaryCategory() + ", likes=" + getLikes() + "]";
     }
 }

@@ -21,6 +21,8 @@
         <logback-classic-version>1.0.6</logback-classic-version>
         <testng-version>5.14.1</testng-version>
         <guava-version>21.0</guava-version>
+        <jopt-simple-version>5.0.3</jopt-simple-version>
+
     </properties>
 
     <build>
@@ -81,6 +83,12 @@
     </build>
 
     <dependencies>
+
+        <dependency>
+            <groupId>net.sf.jopt-simple</groupId>
+            <artifactId>jopt-simple</artifactId>
+            <version>${jopt-simple-version}</version>
+        </dependency>
 
         <dependency>
             <groupId>com.restfb</groupId>
