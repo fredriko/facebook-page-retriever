@@ -87,7 +87,7 @@ public class FacebookCsv {
         OptionParser parser = new OptionParser();
         OptionSpec<Void> help = parser.accepts("help").forHelp();
 
-        // --fetch -credentials <credentials file> -pages <string or file w page ids> -terms <filter terms> -since <date> -until <date> -maxPosts -maxComments -csv-out
+        // Fetch scenario
         OptionSpec<Void> fetch = parser.acceptsAll(Arrays.asList("fetch", "f"));
         OptionSpec<File> credentials = parser.acceptsAll(Arrays.asList("credentials", "c")).requiredIf(fetch).withRequiredArg().ofType(File.class);
         OptionSpec<String> pages = parser.acceptsAll(Arrays.asList("pages", "p")).requiredIf(fetch).withRequiredArg().ofType(String.class);
@@ -115,7 +115,6 @@ public class FacebookCsv {
         System.out.println("Program started with arguments: " + String.join(" ", args));
 
         if (commandLine.has(fetch)) {
-
             FacebookCsv fb = new FacebookCsv(commandLine.valueOf(credentials).toString());
             // TODO set up pages to fetch: provided either as a string, or as a file. If string starting with a @, then try to read it as a file
             // TODO refactor into own method
