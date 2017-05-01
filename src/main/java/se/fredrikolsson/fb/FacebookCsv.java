@@ -36,11 +36,10 @@ public class FacebookCsv {
 
     // https://developers.facebook.com/docs/graph-api/reference/v2.8/post
 
-    // TODO log info about the pages to be processed (number of), and in progress add page number X of Y. Add total processing time at the end of the program.
     // TODO handle interrupt from user to clean/close output files etc.
     // TODO the program will have three modes: setup, expand given pages with liked pages, fetch pages and comments
     // TODO keep track of rate limits - see "rate limiting" here: http://restfb.com/documentation/
-    // TODO make program generate appAccessToken if there is none in the provided credentials properties file
+    // TODO SETUP: supply appId, and appSecret to generate accessToken and write to properties file
     // TODO refactor code, check for unused dependencies so as to minimize final jar
 
     private static List<String> csvHeaderFields = new ArrayList<>();
@@ -179,7 +178,6 @@ public class FacebookCsv {
         System.out.println("Usage: ...");
     }
 
-
     private FacebookCsv(String propertiesFile) {
         init(propertiesFile);
     }
@@ -196,8 +194,10 @@ public class FacebookCsv {
         }
 
         List<FacebookPageInfo> pages = fetchPageInfo(facebookPageIdentifiers);
+        logger.info("Will process the following {} pages:", pages.size());
         List<String> pageIds = new ArrayList<>();
         for (FacebookPageInfo page : pages) {
+            logger.info("Name: {} ({}), Category: {}", page.getName(), page.getUrl(), page.getPrimaryCategory());
             pageIds.add(page.getId());
         }
 
@@ -206,13 +206,18 @@ public class FacebookCsv {
         int responseNum = 0;
 
         for (BatchResponse response : batchResponses) {
-            int numPostsSeenForCurrentPage = 0;
+            int totalNumPostsForPage = 0;
+            int totalNumCommentsForPage = 0;
+            int totalNumSubCommentsForPage = 0;
             boolean doneProcessingPage = false;
 
             // TODO refactor into new method
             String facebookPageUrl = pages.get(responseNum).getUrl();
+            String facebookPageName = pages.get(responseNum).getName();
+            responseNum++;
+
             logger.info("################");
-            logger.info("Processing Facebook Page: {}", facebookPageUrl);
+            logger.info("Processing Facebook Page {} of {}: {} ({})", responseNum, batchResponses.size(), facebookPageName, facebookPageUrl);
             String outputFileBaseName = outputDirectory.toString() + File.separator + createFileBaseName(facebookPageUrl);
             String postsFileName = outputFileBaseName + "-posts.csv";
             String commentsFileName = outputFileBaseName + "-comments.csv";
@@ -223,23 +228,29 @@ public class FacebookCsv {
             logger.info("Writing posts to file: {}", postsFileName);
             logger.info("Writing comments to file: {}", commentsFileName);
 
-            responseNum++;
-
             Connection<Post> postConnection = new Connection<>(getFacebookClient(), response.getBody(), Post.class);
+
             for (List<Post> posts : postConnection) {
                 if (doneProcessingPage) {
                     break;
                 }
                 for (Post post : posts) {
-                    if (maxNumPostsPerPage != -1 && numPostsSeenForCurrentPage >= maxNumPostsPerPage) {
-                        logger.info("Processed {} posts for page {}",
-                                numPostsSeenForCurrentPage, facebookPageUrl);
+                    if (maxNumPostsPerPage != -1 && totalNumPostsForPage >= maxNumPostsPerPage) {
+                        logger.info("Processed {} {}, {} {}, and {} sub-{} for page {}",
+                                totalNumPostsForPage,
+                                totalNumPostsForPage == 1 ? "post" : "posts",
+                                totalNumCommentsForPage,
+                                totalNumCommentsForPage == 1 ? "comment" : "comments",
+                                totalNumSubCommentsForPage,
+                                totalNumSubCommentsForPage == 1 ? "comment" : "comments",
+                                facebookPageUrl);
+
                         doneProcessingPage = true;
                         break;
                     }
-                    numPostsSeenForCurrentPage++;
+                    totalNumPostsForPage++;
 
-                    logger.info("## Processing post number {}, published {}: {}", numPostsSeenForCurrentPage, post.getCreatedTime(), post.getPermalinkUrl());
+                    logger.info("## Processing post number {}, published {}: {}", totalNumPostsForPage, post.getCreatedTime(), post.getPermalinkUrl());
 
                     Map<String, String> postMap = getPostAsMap(post, facebookPageUrl);
 
@@ -263,6 +274,8 @@ public class FacebookCsv {
                                 break;
                             }
                             for (Comment comment : comments) {
+                                totalNumCommentsForPage++;
+
                                 if (numCommentsSeenForCurrentPost % 10 == 0 && numCommentsSeenForCurrentPost > 0) {
                                     logger.info("Seen {} comments so far...", numCommentsSeenForCurrentPost);
                                 }
@@ -281,6 +294,7 @@ public class FacebookCsv {
                                     Connection<Comment> subCommentConnection = fetchCommentConnection(comment.getId());
                                     for (List<Comment> subComments : subCommentConnection) {
                                         for (Comment subComment : subComments) {
+                                            totalNumSubCommentsForPage++;
                                             if (maxNumCommentsPerPage != -1 && numCommentsSeenForCurrentPost >= maxNumCommentsPerPage) {
                                                 logger.debug("Seen {} of maximum allowed {} comments for post {}",
                                                         numCommentsSeenForCurrentPost, maxNumCommentsPerPage, post.getId());
@@ -466,7 +480,7 @@ public class FacebookCsv {
 
 
     // TODO likes should be paged!
-    // TODO add only liked pages that are of any of the (sub) categories of the primary, input, facebookPageIdentifier
+    // TODO add only liked pages that are of any of the (sub) categories of the primary, input, facebookPageIdentifier?
     private FacebookPageInfo fetchPageInfo(String facebookPageIdentifier) {
         JsonObject result = getFacebookClient().fetchObject(facebookPageIdentifier, JsonObject.class, Parameter.with("fields", "id, link, name, likes{id, name, link, category, category_list{id, name, fb_page_categories}}, category, category_list{id, name, fb_page_categories}"));
 
