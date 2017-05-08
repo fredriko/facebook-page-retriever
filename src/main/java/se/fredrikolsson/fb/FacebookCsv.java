@@ -2,8 +2,6 @@ package se.fredrikolsson.fb;
 
 
 import ch.qos.logback.classic.Level;
-import ch.qos.logback.classic.PatternLayout;
-import ch.qos.logback.core.ConsoleAppender;
 import com.restfb.*;
 import com.restfb.batch.BatchRequest;
 import com.restfb.batch.BatchResponse;
@@ -12,12 +10,15 @@ import com.restfb.json.JsonObject;
 import com.restfb.types.*;
 
 import java.io.*;
+import java.nio.file.*;
 import java.util.*;
 
 import joptsimple.OptionException;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
+import net.harawata.appdirs.AppDirs;
+import net.harawata.appdirs.AppDirsFactory;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVPrinter;
 import org.slf4j.Logger;
@@ -33,9 +34,18 @@ import static joptsimple.util.DateConverter.datePattern;
 public class FacebookCsv {
 
     private Logger logger = LoggerFactory.getLogger(FacebookCsv.class);
+    private static final String APPLICATION_NAME = "facebookPageRetriever";
+    private static final String APPLICATION_VERSION = "1.0";
+    private static final String APPLICATION_AUTHOR = "Fredrik Olsson";
+    private static final String APPLICATION_CREDENTIALS = "fbpr.credentials";
+    private static final String APPLICATION_ID_KEY = "appId";
+    private static final String APPLICATION_SECRET_KEY = "appSecret";
+    private static final String APPLICATION_ACCESS_TOKEN_KEY = "accessToken";
 
     // https://developers.facebook.com/docs/graph-api/reference/v2.8/post
 
+    // TODO readme for the fetch mode, including current requirements for setting up the utility
+    // TODO refactor to make Facebook API version a configuration parameter, possibly stored in conjuntion with the app access credentials (?)
     // TODO handle interrupt from user to clean/close output files etc.
     // TODO the program will have three modes: setup, expand given pages with liked pages, fetch pages and comments
     // TODO keep track of rate limits - see "rate limiting" here: http://restfb.com/documentation/
@@ -75,10 +85,12 @@ public class FacebookCsv {
 
         // Fetch scenario
         OptionSpec<Void> fetch = parser.acceptsAll(Arrays.asList("fetch", "f"));
-        // TODO use default value: compute default, per OS, value of config dir (use same as --setup will use for storing credentials
+        // Setup scenario
+        OptionSpec<Void> setup = parser.accepts("setup");
+
         OptionSpec<File> credentials =
                 parser.acceptsAll(Arrays.asList("credentials", "c"))
-                        .requiredIf(fetch).withRequiredArg().ofType(File.class);
+                        .availableIf(fetch).availableIf(setup).withRequiredArg().ofType(File.class);
         OptionSpec<String> pages =
                 parser.acceptsAll(Arrays.asList("pages", "p"))
                         .requiredIf(fetch).withRequiredArg().ofType(String.class);
@@ -104,6 +116,10 @@ public class FacebookCsv {
 
         OptionSpec<Void> verboseLogging = parser.acceptsAll(Arrays.asList("verbose", "v"));
 
+        OptionSpec<String> appId = parser.accepts("appId").requiredIf(setup).withRequiredArg().ofType(String.class);
+        OptionSpec<String> appSecret = parser.accepts("appSecret").requiredIf(setup).withRequiredArg().ofType(String.class);
+
+
         OptionSet commandLine = null;
         try {
             commandLine = parser.parse(args);
@@ -120,7 +136,8 @@ public class FacebookCsv {
         System.out.println("Program started with arguments: " + String.join(" ", args));
 
         if (commandLine.has(fetch)) {
-            FacebookCsv fb = new FacebookCsv(commandLine.valueOf(credentials).toString());
+            FacebookCsv fb = new FacebookCsv();
+            fb.init(commandLine.has(credentials) ? commandLine.valueOf(credentials).toString() : null);
             fb.setVerboseLogging(commandLine.has(verboseLogging));
             List<String> pagesToFetch = getPageIdentifiers(commandLine.valueOf(pages));
             List<String> filterTerms = new ArrayList<>();
@@ -137,6 +154,10 @@ public class FacebookCsv {
             }
             fb.process(pagesToFetch, filterTerms, commandLine.valueOf(outputDirectory),
                     commandLine.valueOf(maxPosts), commandLine.valueOf(maxComments), sinceDate, untilDate);
+        } else if (commandLine.has(setup)) {
+            FacebookCsv fb = new FacebookCsv();
+            fb.setUp(commandLine.valueOf(appId), commandLine.valueOf(appSecret),
+                    commandLine.has(credentials) ? commandLine.valueOf(credentials).toString() : null);
         }
 
     }
@@ -178,8 +199,45 @@ public class FacebookCsv {
         System.out.println("Usage: ...");
     }
 
-    private FacebookCsv(String propertiesFile) {
-        init(propertiesFile);
+    private FacebookCsv() {}
+
+    // TODO
+    private void setUp(String appId, String appSecret, String configFileName) throws IOException {
+        logger.info("Setting up the application...");
+        if (configFileName == null) {
+            configFileName = getDefaultConfigFileName();
+        }
+        File config = new File(configFileName);
+        if (!config.exists()) {
+            if (!config.getParentFile().exists()) {
+                if (!config.getParentFile().mkdirs()) {
+                    throw new RuntimeException("Could not create necessary directory: " + config.getParentFile().toString());
+                } else {
+                    logger.info("Created directory {}", config.getParentFile().toString());
+                }
+            }
+            if (!config.createNewFile()) {
+                throw new RuntimeException("Could not create Facebook credentials file: " + configFileName);
+            } else {
+                logger.info("Created new Facebook credentials file in {}", config.toString());
+            }
+        } else {
+            File configCopy = new File(config.toString() + ".old");
+            logger.info("Copying existing Facebook credentials file to {}", configCopy.toString());
+            Files.copy(config.toPath(), configCopy.toPath(), StandardCopyOption.REPLACE_EXISTING);
+        }
+        logger.info("Fetching application access token from Facebook...");
+        FacebookClient.AccessToken accessToken = new DefaultFacebookClient(Version.VERSION_2_8).obtainAppAccessToken(appId, appSecret);
+        logger.info("Obtained access token: {}", accessToken.toString());
+        logger.info("Storing Facebook credentials to file {}", config.toString());
+        OutputStream out = new FileOutputStream(config);
+        Properties properties = new Properties();
+        properties.setProperty(APPLICATION_ID_KEY, appId);
+        properties.setProperty(APPLICATION_SECRET_KEY, appSecret);
+        properties.setProperty(APPLICATION_ACCESS_TOKEN_KEY, accessToken.getAccessToken());
+        properties.store(out, null);
+        out.close();
+        logger.info("Setup completed.");
     }
 
     private void process(List<String> facebookPageIdentifiers, List<String> filterTerms, File outputDirectory,
@@ -507,13 +565,23 @@ public class FacebookCsv {
         return info;
     }
 
+    private String getDefaultConfigFileName() {
+        AppDirs a = AppDirsFactory.getInstance();
+        return a.getUserConfigDir(APPLICATION_NAME, APPLICATION_VERSION, APPLICATION_AUTHOR) + File.separator + APPLICATION_CREDENTIALS;
+    }
+
     private void init(String configFile) {
+        String f = configFile;
+        if (configFile == null) {
+            f = getDefaultConfigFileName();
+        }
         try {
-            Properties p = readProperties(configFile);
+            Properties p = readProperties(f);
             setFacebookCredentials(p);
-            setFacebookClient(new DefaultFacebookClient(p.getProperty("accessToken"), p.getProperty("appSecret"), Version.VERSION_2_8));
+            setFacebookClient(new DefaultFacebookClient(p.getProperty(APPLICATION_ACCESS_TOKEN_KEY), p.getProperty(APPLICATION_SECRET_KEY), Version.VERSION_2_8));
         } catch (IOException e) {
-            throw new RuntimeException("Could not read properties file " + configFile + ": " + e.getMessage(), e);
+            System.err.println("Could not read Facebook credentials file " + f + ": "+ e.getMessage());
+            System.exit(1);
         }
     }
 

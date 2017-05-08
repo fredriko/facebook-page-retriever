@@ -22,6 +22,7 @@
         <testng-version>5.14.1</testng-version>
         <guava-version>21.0</guava-version>
         <jopt-simple-version>5.0.3</jopt-simple-version>
+        <appdirs-version>1.0.0</appdirs-version>
 
     </properties>
 
@@ -83,6 +84,13 @@
     </build>
 
     <dependencies>
+
+        <!-- https://mvnrepository.com/artifact/net.harawata/appdirs -->
+        <dependency>
+            <groupId>net.harawata</groupId>
+            <artifactId>appdirs</artifactId>
+            <version>${appdirs-version}</version>
+        </dependency>
 
         <dependency>
             <groupId>net.sf.jopt-simple</groupId>
