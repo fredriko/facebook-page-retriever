@@ -49,7 +49,6 @@ public class FacebookCsv {
     // TODO handle interrupt from user to clean/close output files etc.
     // TODO the program will have three modes: setup, expand given pages with liked pages, fetch pages and comments
     // TODO keep track of rate limits - see "rate limiting" here: http://restfb.com/documentation/
-    // TODO SETUP: supply appId, and appSecret to generate accessToken and write to properties file
     // TODO refactor code, check for unused dependencies so as to minimize final jar
 
     private static List<String> csvHeaderFields = new ArrayList<>();
@@ -199,9 +198,9 @@ public class FacebookCsv {
         System.out.println("Usage: ...");
     }
 
-    private FacebookCsv() {}
+    private FacebookCsv() {
+    }
 
-    // TODO
     private void setUp(String appId, String appSecret, String configFileName) throws IOException {
         logger.info("Setting up the application...");
         if (configFileName == null) {
@@ -580,7 +579,7 @@ public class FacebookCsv {
             setFacebookCredentials(p);
             setFacebookClient(new DefaultFacebookClient(p.getProperty(APPLICATION_ACCESS_TOKEN_KEY), p.getProperty(APPLICATION_SECRET_KEY), Version.VERSION_2_8));
         } catch (IOException e) {
-            System.err.println("Could not read Facebook credentials file " + f + ": "+ e.getMessage());
+            System.err.println("Could not read Facebook credentials file " + f + ": " + e.getMessage());
             System.exit(1);
         }
     }
