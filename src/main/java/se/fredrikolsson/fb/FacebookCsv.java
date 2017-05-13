@@ -45,7 +45,7 @@ public class FacebookCsv {
     // https://developers.facebook.com/docs/graph-api/reference/v2.8/post
 
     // TODO readme for the fetch mode, including current requirements for setting up the utility
-    // TODO refactor to make Facebook API version a configuration parameter, possibly stored in conjuntion with the app access credentials (?)
+    // TODO refactor to make Facebook API version a configuration parameter, possibly stored in conjunction with the app access credentials (?)
     // TODO handle interrupt from user to clean/close output files etc.
     // TODO the program will have three modes: setup, expand given pages with liked pages, fetch pages and comments
     // TODO keep track of rate limits - see "rate limiting" here: http://restfb.com/documentation/
