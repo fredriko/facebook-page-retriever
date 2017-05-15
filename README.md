@@ -31,7 +31,7 @@ Here's how to build the program from source. Open a terminal, and run the follow
  3. git clone https://github.com/fredriko/facebook-page-retriever.git
  4. maven clean install
 
-The last command will create a JAR file in which all the program's dependencies are bundled. The JAR is available in `target/facebook-page-retriever.jar
+The last command will create a JAR file in which all the program's dependencies are bundled. The JAR is available in `target/facebook-page-retriever.jar`
 
 ## Set-up the program
 

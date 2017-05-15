@@ -79,7 +79,7 @@ public class FacebookPageRetriever {
         }
 
         OptionParser parser = new OptionParser();
-        OptionSpec<Void> help = parser.accepts("help").forHelp();
+        OptionSpec<Void> help = parser.acceptsAll(Arrays.asList("help", "h")).forHelp();
 
         // Fetch scenario
         OptionSpec<Void> fetch = parser.acceptsAll(Arrays.asList("fetch", "f"));
@@ -200,9 +200,35 @@ public class FacebookPageRetriever {
         this.logger = logBack;
     }
 
-    // TODO
     private static void printUsage() {
-        System.out.println("Usage: ...");
+        System.out.println("--help, -h");
+        System.out.println("  Prints this help message.");
+        System.out.println("");
+        System.out.println("--setup --appId <appId> --appSecret <appSecret> [--credentials <file>]");
+        System.out.println("  Initializes the set-up of the program.");
+        System.out.println("  <appId>       is your Facebook application identifier.");
+        System.out.println("  <appSecret>   is your Facebook application secret.");
+        System.out.println("  <credentials> (optional) is a file in which to store the results of setting up the program. If not given, the set-up will store the credentials in a place local to the user running the program.");
+        System.out.println("");
+        System.out.println("--fetch --pages <[url|@file]> --outputDirectory <dir> [options]");
+        System.out.println("  Initializes the fetching of Posts and Comments from the given Facebook pages.");
+        System.out.println("  <url>   is a single URL to a Facebook Page.");
+        System.out.println("  <@file> is a file in which each non-empty line is a URL or a identifier of a Facebook Page.");
+        System.out.println("  <dir>   is the directory in which the fetched Facebook data will be stored.");
+        System.out.println("");
+        System.out.println("  [options] are any of the commandline options below:");
+        System.out.println("  --terms, -t <t1,t2,...,tn>");
+        System.out.println("    Subjuntion of terms that must be present in a Post for it to be included in the output. NOTE this does not apply to Comments!");
+        System.out.println("  --since, -s <date>");
+        System.out.println("    Fetch posts published on <date> or later, date format: yy-MM-dd, e.g., 17-01-31");
+        System.out.println("  --until, -u <date>");
+        System.out.println("    Fetch posts published until <date> (not including). Date format same as for --since.");
+        System.out.println("  --maxPosts, -x <int>");
+        System.out.println("    Fetch a maximum of <int> posts.");
+        System.out.println("  --maxComments, -y <int>");
+        System.out.println("    Fetch a maximum of <int> comments per Post, not including comments to comments.");
+        System.out.println("  --verbose, -v");
+        System.out.println("    Make the program be explicit about what is going on.");
     }
 
     private FacebookPageRetriever() {
