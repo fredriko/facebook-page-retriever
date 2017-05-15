@@ -229,6 +229,8 @@ public class FacebookPageRetriever {
         System.out.println("    Fetch a maximum of <int> comments per Post, not including comments to comments.");
         System.out.println("  --verbose, -v");
         System.out.println("    Make the program be explicit about what is going on.");
+        System.out.println("  --credentials, -c <file>");
+        System.out.println("    Explicitly point to a file containing your Facebook application's access credentials, generated at set-up time.");
     }
 
     private FacebookPageRetriever() {
