@@ -31,9 +31,9 @@ import static joptsimple.util.DateConverter.datePattern;
  * Class for fetching Posts and Comments from a given set of Facebook Pages, and save them as
  * CSV files.
  */
-public class FacebookCsv {
+public class FacebookPageRetriever {
 
-    private Logger logger = LoggerFactory.getLogger(FacebookCsv.class);
+    private Logger logger = LoggerFactory.getLogger(FacebookPageRetriever.class);
     private static final String APPLICATION_NAME = "facebookPageRetriever";
     private static final String APPLICATION_VERSION = "1.0";
     private static final String APPLICATION_AUTHOR = "Fredrik Olsson";
@@ -70,7 +70,6 @@ public class FacebookCsv {
     }
 
     private FacebookClient facebookClient;
-    private Properties facebookCredentials;
 
     public static void main(String... args) throws Exception {
 
@@ -132,10 +131,10 @@ public class FacebookCsv {
             System.exit(0);
         }
 
-        System.out.println("Program started with arguments: " + String.join(" ", args));
+        System.out.println("Program started with arguments: " + join(args));
 
         if (commandLine.has(fetch)) {
-            FacebookCsv fb = new FacebookCsv();
+            FacebookPageRetriever fb = new FacebookPageRetriever();
             fb.init(commandLine.has(credentials) ? commandLine.valueOf(credentials).toString() : null);
             fb.setVerboseLogging(commandLine.has(verboseLogging));
             List<String> pagesToFetch = getPageIdentifiers(commandLine.valueOf(pages));
@@ -154,11 +153,19 @@ public class FacebookCsv {
             fb.process(pagesToFetch, filterTerms, commandLine.valueOf(outputDirectory),
                     commandLine.valueOf(maxPosts), commandLine.valueOf(maxComments), sinceDate, untilDate);
         } else if (commandLine.has(setup)) {
-            FacebookCsv fb = new FacebookCsv();
+            FacebookPageRetriever fb = new FacebookPageRetriever();
             fb.setUp(commandLine.valueOf(appId), commandLine.valueOf(appSecret),
                     commandLine.has(credentials) ? commandLine.valueOf(credentials).toString() : null);
         }
 
+    }
+
+    private static String join(String[] items) {
+        StringBuilder s = new StringBuilder();
+        for (String item : items) {
+            s.append(item).append(" ");
+        }
+        return s.toString().trim();
     }
 
     private static List<String> getPageIdentifiers(String identifier) throws IOException {
@@ -198,7 +205,7 @@ public class FacebookCsv {
         System.out.println("Usage: ...");
     }
 
-    private FacebookCsv() {
+    private FacebookPageRetriever() {
     }
 
     private void setUp(String appId, String appSecret, String configFileName) throws IOException {
@@ -483,7 +490,7 @@ public class FacebookCsv {
     }
 
 
-    protected List<BatchRequest> createBatchRequests(Collection<String> facebookPageIds, int requestLimit, Date since, Date until) {
+    private List<BatchRequest> createBatchRequests(Collection<String> facebookPageIds, int requestLimit, Date since, Date until) {
 
         if (since != null && until != null && until.before(since)) {
             throw new IllegalArgumentException("Parameter \"until\" (" + until.toString() + ")cannot be before \"since\" (" + since.toString() + ")");
@@ -576,7 +583,6 @@ public class FacebookCsv {
         }
         try {
             Properties p = readProperties(f);
-            setFacebookCredentials(p);
             setFacebookClient(new DefaultFacebookClient(p.getProperty(APPLICATION_ACCESS_TOKEN_KEY), p.getProperty(APPLICATION_SECRET_KEY), Version.VERSION_2_8));
         } catch (IOException e) {
             System.err.println("Could not read Facebook credentials file " + f + ": " + e.getMessage());
@@ -591,15 +597,6 @@ public class FacebookCsv {
     private void setFacebookClient(FacebookClient facebookClient) {
         this.facebookClient = facebookClient;
     }
-
-    private Properties getFacebookCredentials() {
-        return facebookCredentials;
-    }
-
-    private void setFacebookCredentials(Properties facebookCredentials) {
-        this.facebookCredentials = facebookCredentials;
-    }
-
 
     private static List<String> getCsvHeaderFields() {
         return csvHeaderFields;

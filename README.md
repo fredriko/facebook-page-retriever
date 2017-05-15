@@ -4,7 +4,7 @@ The Facebook Page Retriever is a command line utility for retrieving posts and c
 
 You can either download and run a compiled version of the program, or build the program from the source yourself. The former
 alternative is suitable for those of you who are just interested in getting Facebook Pages data, while the latter is
-for you who'd like to have the latest version, or get your hands dirty with code.
+for you who'd like to get your hands dirty with code.
 
 Regardless of which route you take, there are a couple of things you need to get going.
 
@@ -26,7 +26,7 @@ Regardless of which route you take, there are a couple of things you need to get
 
 ## Get the program
 
-You can either [download a pre-compiled version of the program](link), or build it yourself.
+You can either [download a pre-compiled version of the program](bin/facebook-page-retriever.jar), or build it yourself.
 
 Here's how to build it from source:
 
