@@ -13,12 +13,12 @@ Regardless of which route you take, there are a couple of things you need to get
  * An **application registered with Facebook**. Follow the instructions [here](https://developers.facebook.com/docs/apps/register). 
     * I don't believe any of the existing application categories is spot on, so select **website** as platform in lack of a better option.
     * Take note of the **application id**, and the **application secret** on the application's page: you'll need that information when setting up this program.
-  * **Java 7** or later [download and installation instructions](http://www.oracle.com/technetwork/java/javase/downloads/index.html)
+  * **Java 7** or later ([download](http://www.oracle.com/technetwork/java/javase/downloads/index.html))
   
   Optional dependencies, only required if you wish to build the program from source:
   
-  * **maven 3** [download and installation instructions](https://maven.apache.org/download.cgi)
-  * **git** [download and installation instructions](https://git-scm.com/downloads)
+  * **maven 3** ([download](https://maven.apache.org/download.cgi))
+  * **git** ([download](https://git-scm.com/downloads))
 
 ## Get the program
 
@@ -38,9 +38,11 @@ The last command will create a JAR file in which all the program's dependencies 
 In the following, it is assumed you type all commands in a terminal window, in the same directory as the `facebook-page-retriever.jar` is located. 
 You only need to carry out the set-up step before you access Facebook Page data the first time. Type: 
  
- `java -jar facebook-page-retriever.jar --setup --appId <your-facebook-application-id> --appSecret <your-facebook-application-secret>`
+ ```
+ java -jar facebook-page-retriever.jar --setup --appId <application-id> --appSecret <application-secret>
+ ```
 
-Where `your-facebook-application-id` and `your-facebook-application-secret` are the ones you obtained when setting up your Facebook application. 
+Where `application-id` and `application-secret` are  application id and secret, respectively, you obtained when setting up your Facebook application. 
 This will create a file containing the credentials required for accessing Facebook's API. Note that the generated file will
  contain your application secret: keep it, well, a secret.
   
