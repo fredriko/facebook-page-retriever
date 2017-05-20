@@ -45,6 +45,16 @@ You only need to carry out the set-up step before you access Facebook Page data 
 Where `application-id` and `application-secret` are  application id and secret, respectively, you obtained when setting up your Facebook application. 
 This will create a file containing the credentials required for accessing Facebook's API. Note that the generated file will
  contain your application secret: keep it, well, a secret.
+ 
+ Optionally, you can have the configuration saved to an explicitly named file. Like so:
+ 
+ ```
+ java -jar facebook-page-retriever.jar --setup --appId <application-id> --appSecret <application-secret> --credentials <file>
+ ```
+ 
+ This is useful if you expect to use the program on several platforms and need to share its access credentials between platforms. 
+ On the other hand, creating the access credentials this way requires you to include the `--credentials <file>` command 
+ line options in every subsequent use of the program.
   
 ## Lists of useful Facebook Pages
 

@@ -44,12 +44,8 @@ public class FacebookPageRetriever {
 
     // https://developers.facebook.com/docs/graph-api/reference/v2.8/post
 
-    // TODO readme for the fetch mode, including current requirements for setting up the utility
-    // TODO refactor to make Facebook API version a configuration parameter, possibly stored in conjunction with the app access credentials (?)
     // TODO handle interrupt from user to clean/close output files etc.
-    // TODO the program will have three modes: setup, expand given pages with liked pages, fetch pages and comments
     // TODO keep track of rate limits - see "rate limiting" here: http://restfb.com/documentation/
-    // TODO refactor code, check for unused dependencies so as to minimize final jar
 
     private static List<String> csvHeaderFields = new ArrayList<>();
 
@@ -572,9 +568,15 @@ public class FacebookPageRetriever {
 
 
     // TODO likes should be paged!
-    // TODO add only liked pages that are of any of the (sub) categories of the primary, input, facebookPageIdentifier?
     private FacebookPageInfo fetchPageInfo(String facebookPageIdentifier) {
-        JsonObject result = getFacebookClient().fetchObject(facebookPageIdentifier, JsonObject.class, Parameter.with("fields", "id, link, name, likes{id, name, link, category, category_list{id, name, fb_page_categories}}, category, category_list{id, name, fb_page_categories}"));
+        JsonObject result =
+                getFacebookClient().fetchObject(
+                        facebookPageIdentifier,
+                        JsonObject.class,
+                        Parameter.with("fields",
+                                "id, link, name, " +
+                                        "likes{id, name, link, category, category_list{id, name, fb_page_categories}}, " +
+                                        "category, category_list{id, name, fb_page_categories}"));
 
         FacebookPageInfo info = new FacebookPageInfo(result.get("name").asString(), result.get("id").asString());
         info.setUrl(result.get("link").asString());
