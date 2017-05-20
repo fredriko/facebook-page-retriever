@@ -59,13 +59,38 @@ This will create a file containing the credentials required for accessing Facebo
 ## Lists of useful Facebook Pages
 
 In [this directory](pages/), there are a number of files containing lists of useful Facebook Pages, e.g., Swedish political 
-parties, news outlets, large airline carriers, etc. Please, feel free to add to the lists! Send me a pull request with any changes.
+parties, and news outlets. Please, feel free to add to the lists! Send me a pull request with any changes.
 
-## Usage examples
+## Usage
 
-To see the command line options available
+To see the command line options available:
 
 `java -jar facebook-page-retriever.jar --help`
 
+For each Facebook Page supplied to the program, it produces two CSV files: one containing Posts from the page, and
+another containing the Comments to the Posts. The headers of the CSV files are the same to facilitate processing in
+downstream analysis software.
 
+### Usage examples
+
+Get the ten last posts from Reddit's Facebook page and write the results to CSV file in `/tmp`.
+
+`java -jar facebook-page-retriever.jar --fetch --pages https://www.facebook.com/reddit/ --maxPosts 10 --outputDirectory /tmp/`
+
+
+Process the ten last posts from Reddit's Facebook page and write only those containing the substring *AMA*, and their comments, to `/tmp`
+
+`java -jar facebook-page-retriever.jar --fetch --pages https://www.facebook.com/reddit/ --maxPosts 10 --terms AMA --outputDirectory /tmp`
+
+
+Get the January 2017 posts, and at most 10 comments per post, from Reddit's Facebook page, and write the results to `/tmp`
+
+`java -jar facebook-page-retriever.jar --fetch --pages https://www.facebook.com/reddit/ --maxComments 10 --since 17-01-01 --until 17-02-01 --outputDirectory /tmp`
+
+Get the last ten posts, and at most five comments from each post, from the pages of Swedish political parties (assuming the [list of pages](pages/swedish-political-parties.txt) 
+is available in your current working directory):
+ 
+ `java -jar facebook-page-retriever.jar --fetch --pages @/path/to/swedish-political-parties-txt -x 10 -y 5 -o /tmp`
+ 
+ 
 

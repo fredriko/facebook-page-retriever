@@ -206,7 +206,7 @@ public class FacebookPageRetriever {
         System.out.println("  <appSecret>   is your Facebook application secret.");
         System.out.println("  <credentials> (optional) is a file in which to store the results of setting up the program. If not given, the set-up will store the credentials in a place local to the user running the program.");
         System.out.println("");
-        System.out.println("--fetch --pages <[url|@file]> --outputDirectory <dir> [options]");
+        System.out.println("--fetch --pages, -p <[url|@file]> --outputDirectory, -o <dir> [options]");
         System.out.println("  Initializes the fetching of Posts and Comments from the given Facebook pages.");
         System.out.println("  <url>   is a single URL to a Facebook Page.");
         System.out.println("  <@file> is a file in which each non-empty line is a URL or a identifier of a Facebook Page.");
